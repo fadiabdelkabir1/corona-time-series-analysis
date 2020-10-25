@@ -1,0 +1,266 @@
+---
+title: "corona - analysis"
+author: "fadi abdelkabir"
+date: "28/03/2020"
+output:
+  beamer_presentation: default
+  html_document: default
+  ioslides_presentation: default
+  pdf_document: default
+  slidy_presentation: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+#### importation ####
+
+```{r}
+url1<-'https://data.humdata.org/hxlproxy/api/data-preview.csv?url=https%3A%2F%2Fraw.githubusercontent.com%2FCSSEGISandData%2FCOVID-19%2Fmaster%2Fcsse_covid_19_data%2Fcsse_covid_19_time_series%2Ftime_series_covid19_confirmed_global.csv&filename=time_series_covid19_confirmed_global.csv'
+
+confirmed_df<- read.csv(url1, header = TRUE, sep = ',',check.names=FALSE)
+
+View(confirmed_df)
+
+```
+
+
+
+#### data preparation ####
+##### partie 1 vectors #####
+
+```{r}
+tunisie = confirmed_df[confirmed_df$'Country/Region'=='Tunisia',]
+tunisie=tunisie[,5:ncol(tunisie)]
+tunisie=tunisie[,tunisie>0]
+tunisia=colSums(tunisie)
+tunisia=as.vector(tunisia)
+View(tunisia)
+tun_ts=ts(tunisia)
+plot(tunisia)
+plot(tun_ts)
+```
+
+##### partie 2 dates #####
+```{r}
+dates = colnames(tunisie[1:ncol(tunisie)])
+```
+
+#### modeling and predictions #### 
+##### case understanding #####
+
+```{r}
+" * we we'll make a new dataframe called 'newtunisie' the first column will       take the exact numbers of the confirmed cases.
+  * then we will start to build the predictive models based on the fist 15        observation.
+  * the second column will be for zakaria's model with coef = 1.2.
+  * the third column will use the forecast or predict function.
+  * in the end we will compare the three results with a ggplot.
+```
+
+##### model 0.1  ' zakaria ' preparation ####
+
+```{r}
+length(tunisia)
+added = tunisia[1:15]
+added_es=tunisia
+newtunisie= cbind(tunisia,added_es)
+newtunisie=data.frame(newtunisie)
+last= added[length(added)]
+for (i in (length(added)+1):length(tunisia)){
+  newtunisie$added_es[i]=round(last*1.2)
+  last=newtunisie$added[i]
+}
+added
+View(newtunisie)
+```
+
+
+##### model 0.2 ' new ' preparation ####
+
+```{r}
+require(forecast)
+
+days= seq(0,(length(added))-1)
+days=as.vector(days)
+tun_ts1=ts(added,start = 0)
+plot(tun_ts1)
+pred<-forecast(tun_ts1)
+pred
+prediction=pred$upper[,2][0:9]
+prediction
+pre_added=round(c(added,prediction))
+pre_added
+length(pre_added)
+newtunisie= cbind(newtunisie,pre_added)
+newtunisie$tunisia=as.numeric(newtunisie$tunisia)
+newtunisie$added_es=as.numeric(newtunisie$added_es)
+newtunisie$pre_added=as.numeric(newtunisie$pre_added)
+newtunisie=data.frame(newtunisie)
+View(newtunisie)
+```
+
+
+#### visualization ####
+
+```{r}
+library(ggplot2) 
+graph  = ggplot(data = newtunisie) + geom_line( aes(x = date, y = newtunisie$tunisia, colour = "confirmed cases ")) + geom_line( aes(x = date , y = newtunisie$added_es, colour = "estemated by 1.2"))+ geom_line( aes(x = date , y = newtunisie$pre_added, colour = "estemated by forcast fun"))
+graph +ggtitle("COVID-19 CASES IN TUNISIA")+labs(x = "NUMBER OF DAYS",y = "NUMBER OF CASES") +  scale_colour_manual(values=c("blue", "red","yellow")) + theme(legend.position=c(0.1, 0.1), legend.justification = c("left","bottom")) 
+```
+
+##### interpretation ##### 
+```{r}
+" * as we can see from the graph that zakaria's is not correct and the            predicted values are so far from the real values same goes with the           forcast function '
+```
+
+
+#### TESTS ####
+
+```{r}
+print("t-test for zakaria's model")
+t.test(newtunisie$added_es,newtunisie$tunisia) 
+
+print("t-test for the forecast function model ")
+t.test(newtunisie$pre_added,newtunisie$tunisia) 
+
+```
+
+
+#### interpretation ####
+
+```{r}
+" * so the p-values prouves our interpretation from the graph 
+  * model 0.1 : p-value = 0.4277 < 0.05 we reject H0 and accept H1: theres a significant difference in the predicted values and the real values 
+
+  * model 0.2 : p-value = 0.5725 < 0.05 we reject H0 and accept H1: theres a significant difference in the predicted values and the real values 
+"
+```
+
+
+
+
+#### ARIMA ####
+
+```{r}
+library(forecast)
+fit <- auto.arima(tun_ts)
+fit
+fcast <- forecast(fit)
+fcast
+```
+
+#### interpretation ####
+
+```{r}
+" *  -0.4956 is significant
+  * i'll be testing these results in a weeks time with the real cases to see how good is this prediction and can we rely on it automaticly in the futur
+"
+```
+
+
+#### more analysis ####
+
+```{r}
+dayss=seq(0,length=length(dates))
+tun_ts2=ts(tunisia,start = 0)
+```
+
+
+##### regression linéaire de la tendance #####
+
+
+```{r}
+temps = dayss
+linearreg= lm(tun_ts2~dayss)
+summary(linearreg)
+fv=linearreg$fitted.values # les valeurs estimés
+temp_fit_line=ts(fv,start = 0)
+```
+
+
+##### regression polynomial de la tendance ####
+
+
+```{r}
+tempsq = temps*temps
+ploy_reg=lm(tun_ts2~temps+tempsq)
+summary(ploy_reg)
+fv1=ploy_reg$fitted.values
+temp_fit_poly=ts(fv1,start = 0)
+```
+
+
+##### regression moving average  de la tendance ##### 
+
+
+```{r}
+library(stats)
+length(tun_ts)
+moving_avg=filter(tun_ts,method='convolution',sides=2,filter=array(1/4,dim = 4))
+moving_avg
+# plus la pas est elévée plus la representation est lisse
+moving_avg_ts=ts(moving_avg,start=0)
+```
+
+
+##### local poly regression  #####
+
+```{r}
+loc_reg=loess(tun_ts2~dayss)
+loc_reg.fit=ts(loc_reg$fitted,start=0)
+```
+
+##### representation #####
+
+```{r}
+library(ggplot2)
+graph1  = ggplot(data = tun_ts2) + geom_line( aes(x = dayss, y = tun_ts2, colour = "confirmed cases ")) + geom_line( aes(x = dayss , y = loc_reg.fit, colour = "loc ploy reg")) + geom_line(aes(x=dayss,y=temp_fit_line,colour = "linear reg"))+ geom_line(aes(x=dayss,y=temp_fit_poly,colour = "poly reg")) + geom_line(aes(x=dayss,y=moving_avg_ts,colour = "moving average reg")) 
+graph1
+```
+
+#### interpretation ####
+
+```{r}
+" * from this graph it look like the tendency of the dataset takes the shape of the tendency of localy polynomial regression ' they are very close in shape and values '
+"
+```
+
+
+#### model shaping ####
+##### case understanding #####
+
+```{r}
+" * for this model i choosed not put a saisonality for the reason that we lac information, it s a values for pandemic infection and it is very conditionaly so it doesnt have a frequent behavior so i ll just remove the tendency 
+"
+```
+
+#### shaping ####
+
+```{r}
+new_tun=tun_ts2-(loc_reg.fit)
+plot(new_tun)
+```
+
+
+
+```{r}
+require(tseries)
+kpss.test(new_tun)
+```
+
+```{r}
+"  * p-value=0.1 is grater then 0.05 => means : we accept The null hypothesis for the test is that the data is stationary.
+"
+```
+
+
+```{r}
+shapiro.test(new_tun)
+```
+```{r}
+"  * the p-value is less than 0.05, then the null hypothesis that the data are normally distributed is rejected. 
+"
+```
+
+
