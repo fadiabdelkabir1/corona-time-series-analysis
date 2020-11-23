@@ -1,4 +1,4 @@
-# 
+# CORONA TIME SERIES ANALYSIS
 TASKS:          
 o Project Overview and Import Libraries         
 o Collecting and inspecting data                
